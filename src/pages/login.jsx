@@ -1,197 +1,152 @@
 import { useState } from "react";
 
-export default function Login({ setView, goBack }) {
+export default function Login() {
   const [form, setForm] = useState({ email: "", password: "" });
-  const [showRegister, setShowRegister] = useState(false);
-  const [registerForm, setRegisterForm] = useState({ email: "", password: "" });
-  const [error, setError] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [successMsg, setSuccessMsg] = useState("");
 
-    const handleChange = (e) => {
-      setForm({ ...form, [e.target.name]: e.target.value });
-    };
-    const handleRegisterChange = (e) => {
-      setRegisterForm({ ...registerForm, [e.target.name]: e.target.value });
-    };
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
 
-    const handleSubmit = (e) => {
-      e.preventDefault();
-      setError("");
-      if (form.email && form.password) {
-        if (setView) {
-          let nextView = null;
-          let nombre = "";
-          if (form.email === "admin@collservice.com") {
-            if (form.password === "admin123") {
-              nextView = "admin";
-              nombre = "Administrador";
-            } else {
-              setError("Contraseña incorrecta para administrador");
-              return;
-            }
-          } else if (form.email === "empleada@collservice.com") {
-            if (form.password === "empleada123") {
-              nextView = "empleado";
-              nombre = "Empleada";
-            } else {
-              setError("Contraseña incorrecta para empleada");
-              return;
-            }
-          } else if (form.email === "cliente@collservice.com" && form.password === "cliente123") {
-            nextView = "cliente";
-            nombre = "Cliente";
-          } else {
-            setError("Correo o contraseña incorrectos");
-            return;
-          }
-          setSuccessMsg(`¡Bienvenido/a ${nombre}! Redirigiendo...`);
-          setTimeout(() => {
-            setSuccessMsg("");
-            setView(nextView);
-          }, 1200);
-        } else {
-          setError("No se pudo cambiar de vista. Prop setView no disponible.");
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    console.log("Datos enviados:", form);
+  };
+
+  return (
+    <>
+      <style>{`
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
         }
-      } else {
-        setError("Completa todos los campos");
-      }
-    };
 
-    const handleRegister = (e) => {
-      e.preventDefault();
-      setError("");
-      if (registerForm.email && registerForm.password) {
-        if (setView) {
-          setView("cliente");
-        } else {
-          setError("No se pudo cambiar de vista. Prop setView no disponible.");
+        .page-container {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          min-height: 100vh;
+          background-color: #f6f5fc;
+          font-family: "Segoe UI", Arial, sans-serif;
         }
-      } else {
-        setError("Completa todos los campos para registrarte");
-      }
-    };
 
-    return (
-      <>
-        <style>{`.login-container { background: white; padding: 35px 40px; border-radius: 10px; box-shadow: 0 6px 12px rgba(0,0,0,0.1); width: 380px; text-align: center; border-top: 6px solid #e76bb2; } .login-container h2 { margin-bottom: 20px; color: #e76bb2; font-size: 26px; font-weight: bold; } .input-group { margin-bottom: 18px; text-align: left; } .input-group label { display: block; font-size: 14px; margin-bottom: 6px; color: #444; } .input-group input { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #ccc; font-size: 14px; transition: border 0.3s; } .input-group input:focus { border-color: #a18cd1; outline: none; } .btn-login { width: 100%; padding: 12px; background: linear-gradient(90deg, #fbc2eb, #a18cd1); color: white; border: none; border-radius: 10px; font-size: 15px; font-weight: bold; cursor: pointer; transition: opacity 0.3s; } .btn-login:hover { opacity: 0.9; } .extra { margin-top: 20px; font-size: 14px; color: #555; } .extra a { color: #e76bb2; text-decoration: none; font-weight: bold; } .extra a:hover { text-decoration: underline; } .carrusel-container { position: relative; max-width: 100%; margin: 0 auto; overflow: hidden; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); } .carrusel-slide { width: 100%; display: block; border-radius: 10px; } .carrusel-controls { position: absolute; top: 50%; width: 100%; display: flex; justify-content: space-between; transform: translateY(-50%); } .carrusel-btn { background: rgba(255,255,255,0.8); border: none; border-radius: 50%; width: 40px; height: 40px; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: background 0.3s; } .carrusel-btn:hover { background: rgba(255,255,255,1); } .carrusel-indicators { text-align: center; margin-top: 10px; } .carrusel-indicator { display: inline-block; width: 10px; height: 10px; margin: 0 5px; background: #ccc; border-radius: 50%; cursor: pointer; transition: background 0.3s; } .carrusel-indicator.active { background: #e76bb2; }`}</style>
-        <Carrusel />
+        .login-container {
+          background: white;
+          padding: 35px 40px;
+          border-radius: 16px;
+          box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+          width: 380px;
+          text-align: center;
+          border-top: 6px solid #e76bb2;
+        }
+
+        .login-container h2 {
+          margin-bottom: 20px;
+          color: #e76bb2;
+          font-size: 26px;
+          font-weight: bold;
+        }
+
+        .input-group {
+          margin-bottom: 18px;
+          text-align: left;
+        }
+
+        .input-group label {
+          display: block;
+          font-size: 14px;
+          margin-bottom: 6px;
+          color: #444;
+        }
+
+        .input-group input {
+          width: 100%;
+          padding: 10px;
+          border-radius: 10px;
+          border: 1px solid #ccc;
+          font-size: 14px;
+          transition: border 0.3s;
+        }
+
+        .input-group input:focus {
+          border-color: #a18cd1;
+          outline: none;
+        }
+
+        .btn-login {
+          width: 100%;
+          padding: 12px;
+          background: linear-gradient(90deg, #fbc2eb, #a18cd1);
+          color: white;
+          border: none;
+          border-radius: 10px;
+          font-size: 15px;
+          font-weight: bold;
+          cursor: pointer;
+          transition: opacity 0.3s;
+        }
+
+        .btn-login:hover {
+          opacity: 0.9;
+        }
+
+        .extra {
+          margin-top: 20px;
+          font-size: 14px;
+          color: #555;
+        }
+
+        .extra a {
+          color: #e76bb2;
+          text-decoration: none;
+          font-weight: bold;
+        }
+
+        .extra a:hover {
+          text-decoration: underline;
+        }
+      `}</style>
+
+      <div className="page-container">
         <div className="login-container">
-          {goBack && (
-            <button onClick={goBack} style={{ position: 'absolute', left: 20, top: 20, background: 'none', border: 'none', color: '#a18cd1', fontSize: 22, cursor: 'pointer' }} title="Atrás">←</button>
-          )}
-          {!showRegister ? (
-            <>
-              <h2>Iniciar Sesión</h2>
-              <form onSubmit={handleSubmit}>
-                <div className="input-group">
-                  <label htmlFor="email">Correo electrónico</label>
-                  <input
-                    type="email"
-                    id="email"
-                    name="email"
-                    value={form.email}
-                    onChange={handleChange}
-                    placeholder="Ej: usuario@email.com"
-                    required
-                  />
-                </div>
-                <div className="input-group">
-                  <label htmlFor="password">Contraseña</label>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      id="password"
-                      name="password"
-                      value={form.password}
-                      onChange={handleChange}
-                      placeholder="Tu contraseña"
-                      required
-                      style={{ paddingRight: 38 }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(v => !v)}
-                      style={{
-                        position: 'absolute',
-                        right: 6,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        background: 'none',
-                        border: 'none',
-                        color: '#a18cd1',
-                        cursor: 'pointer',
-                        fontSize: 16,
-                        padding: 0
-                      }}
-                      tabIndex={-1}
-                      aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                    >
-                      {showPassword ? '🙈' : '👁️'}
-                    </button>
-                  </div>
-                </div>
-                <button type="submit" className="btn-login">
-                  Ingresar
-                </button>
-                <div style={{ marginTop: 10, textAlign: 'right' }}>
-                  <a href="#" style={{ color: '#a18cd1', fontSize: 13, textDecoration: 'underline', cursor: 'pointer' }}
-                    onClick={e => { e.preventDefault(); setView && setView('recuperar'); }}>
-                    ¿Olvidaste tu contraseña?
-                  </a>
-                </div>
-                {error && <div style={{ color: '#e74c3c', marginTop: 10 }}>{error}</div>}
-                {successMsg && <div style={{ color: '#27ae60', marginTop: 10, fontWeight: 600, fontSize: 16 }}>{successMsg}</div>}
-              </form>
-              <p className="extra">
-                ¿No tienes cuenta? <a href="#" onClick={e => {e.preventDefault(); setShowRegister(true);}}>Regístrate aquí</a>
-              </p>
-            </>
-          ) : (
-            <>
-              <h2>Registro</h2>
-              <form onSubmit={handleRegister}>
-                <div className="input-group">
-                  <label htmlFor="reg-email">Correo electrónico</label>
-                  <input
-                    type="email"
-                    id="reg-email"
-                    name="email"
-                    value={registerForm.email}
-                    onChange={handleRegisterChange}
-                    placeholder="Ej: usuario@email.com"
-                    required
-                  />
-                </div>
-                <div className="input-group">
-                  <label htmlFor="reg-password">Contraseña</label>
-                  <input
-                    type="password"
-                    id="reg-password"
-                    name="password"
-                    value={registerForm.password}
-                    onChange={handleRegisterChange}
-                    placeholder="Crea una contraseña"
-                    required
-                  />
-                </div>
-                <button type="submit" className="btn-login">
-                  Registrarme
-                </button>
-                {error && <div style={{ color: '#e74c3c', marginTop: 10 }}>{error}</div>}
-              </form>
-              <p className="extra">
-                ¿Ya tienes cuenta? <a href="#" onClick={e => {e.preventDefault(); setShowRegister(false);}}>Inicia sesión aquí</a>
-              </p>
-            </>
-          )}
+          <h2>Iniciar Sesión</h2>
+          <form onSubmit={handleSubmit}>
+            <div className="input-group">
+              <label htmlFor="email">Correo electrónico</label>
+              <input
+                type="email"
+                id="email"
+                name="email"
+                value={form.email}
+                onChange={handleChange}
+                placeholder="Ej: usuario@email.com"
+                required
+              />
+            </div>
+
+            <div className="input-group">
+              <label htmlFor="password">Contraseña</label>
+              <input
+                type="password"
+                id="password"
+                name="password"
+                value={form.password}
+                onChange={handleChange}
+                placeholder="Tu contraseña"
+                required
+              />
+            </div>
+
+            <button type="submit" className="btn-login">
+              Ingresar
+            </button>
+          </form>
+
+          <p className="extra">
+            ¿No tienes cuenta? <a href="#">Regístrate aquí</a>
+          </p>
         </div>
-        <footer className="login-footer">
-          <a href="#" onClick={e => { e.preventDefault(); setView && setView('terminos'); }} style={{ marginRight: 16, color: '#a18cd1', textDecoration: 'underline', fontSize: 13 }}>Términos y Condiciones</a>
-          <a href="#" onClick={e => { e.preventDefault(); setView && setView('privacidad'); }} style={{ marginRight: 16, color: '#a18cd1', textDecoration: 'underline', fontSize: 13 }}>Política de Privacidad</a>
-          <a href="#" onClick={e => { e.preventDefault(); setView && setView('datos'); }} style={{ color: '#a18cd1', textDecoration: 'underline', fontSize: 13 }}>Cuidado de Datos Personales</a>
-        </footer>
-        <style>{`.login-footer { margin-top: 30px; text-align: center; } .login-footer a:hover { text-decoration: none; color: #e76bb2; }`}</style>
-      </>
-    );
+      </div>
+    </>
+  );
 }
