@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import ChatPage from "./chat";
+import StarRating from "../components/StarRating";
 const empleadosData = [
   {
     id: 1,
@@ -60,6 +62,7 @@ function Cliente() {
   const [busqueda, setBusqueda] = useState("");
   const [especialidad, setEspecialidad] = useState("");
   const [verMasId, setVerMasId] = useState(null);
+  const [chatEmpleado, setChatEmpleado] = useState(null);
 
   // Obtener especialidades únicas
   const especialidades = [
@@ -115,36 +118,63 @@ function Cliente() {
           </div>
         </div>
       ) : null}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-        {empleadosFiltrados.length === 0 ? (
-          <div className="col-span-full text-center text-gray-500">No se encontraron empleados.</div>
-        ) : (
-          empleadosFiltrados.map((empleado) => (
-            <div
-              key={empleado.id}
-              className="bg-white rounded-2xl shadow-lg p-6 flex flex-col items-center border border-pink-100 hover:shadow-2xl transition group relative overflow-hidden"
-              style={{ boxShadow: '0 6px 24px 0 rgba(231,107,178,0.08)', minHeight: 370 }}
-            >
-              <div className="absolute -top-8 right-0 opacity-10 text-pink-400 text-8xl pointer-events-none select-none group-hover:opacity-20 transition">★</div>
-              <img
-                src={empleado.foto}
-                alt={empleado.nombre}
-                className="w-24 h-24 object-cover rounded-full mb-3 border-4 border-pink-200 shadow group-hover:scale-105 transition"
-                style={{ background: '#fbc2eb' }}
-              />
-              <h2 className="text-xl font-bold text-pink-700 mb-1 group-hover:text-pink-500 transition">{empleado.nombre}</h2>
-              <p className="text-pink-400 font-semibold mb-1">{empleado.puesto}</p>
-              <span className="inline-block bg-pink-100 text-pink-600 text-xs font-semibold px-3 py-1 rounded-full mb-2 shadow-sm">{empleado.especialidad}</span>
-              <p className="text-left text-gray-700 mb-2 text-sm">{empleado.descripcion}</p>
-              <button
-                className="mt-auto px-5 py-2 bg-gradient-to-r from-pink-400 to-pink-600 text-white rounded-full font-bold shadow hover:from-pink-500 hover:to-pink-700 transition"
-                onClick={() => setVerMasId(empleado.id)}
-              >
-                Ver perfil
-              </button>
-            </div>
-          ))
+      <div className="flex flex-row gap-6">
+        {chatEmpleado && (
+          <div className="w-1/3 bg-white rounded-lg shadow-lg p-4 h-[600px] overflow-auto">
+            <ChatPage
+              initialState={{
+                employee: { id: chatEmpleado.id, nombre: chatEmpleado.nombre },
+                role: "cliente"
+              }}
+              onClose={() => setChatEmpleado(null)}
+            />
+          </div>
         )}
+
+        <div className={`grid grid-cols-1 sm:grid-cols-2 gap-6 ${chatEmpleado ? 'w-2/3 md:grid-cols-2' : 'w-full md:grid-cols-3'}`}>
+          {empleadosFiltrados.length === 0 ? (
+            <div className="col-span-full text-center text-gray-500">No se encontraron empleados.</div>
+          ) : (
+            empleadosFiltrados.map((empleado) => (
+              <div
+                key={empleado.id}
+                className="bg-white rounded-2xl shadow-lg p-6 flex flex-col items-center border border-pink-100 hover:shadow-2xl transition group relative overflow-hidden"
+                style={{ boxShadow: '0 6px 24px 0 rgba(231,107,178,0.08)', minHeight: 370 }}
+              >
+                <div className="absolute -top-8 right-0 opacity-10 text-pink-400 text-8xl pointer-events-none select-none group-hover:opacity-20 transition">★</div>
+                <img
+                  src={empleado.foto}
+                  alt={empleado.nombre}
+                  className="w-24 h-24 object-cover rounded-full mb-3 border-4 border-pink-200 shadow group-hover:scale-105 transition"
+                  style={{ background: '#fbc2eb' }}
+                />
+                <h2 className="text-xl font-bold text-pink-700 mb-1 group-hover:text-pink-500 transition">{empleado.nombre}</h2>
+                <p className="text-pink-400 font-semibold mb-1">{empleado.puesto}</p>
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="inline-block bg-pink-100 text-pink-600 text-xs font-semibold px-3 py-1 rounded-full shadow-sm">{empleado.especialidad}</span>
+                  <div>
+                    <StarRating employeeId={empleado.id} />
+                  </div>
+                </div>
+                <p className="text-left text-gray-700 mb-2 text-sm">{empleado.descripcion}</p>
+                <div className="flex gap-2">
+                  <button
+                    className="mt-auto px-5 py-2 bg-gradient-to-r from-pink-400 to-pink-600 text-white rounded-full font-bold shadow hover:from-pink-500 hover:to-pink-700 transition"
+                    onClick={() => setVerMasId(empleado.id)}
+                  >
+                    Ver perfil
+                  </button>
+                  <button
+                    className="mt-auto px-5 py-2 bg-gradient-to-r from-pink-400 to-pink-600 text-white rounded-full font-bold shadow hover:from-pink-500 hover:to-pink-700 transition"
+                    onClick={() => setChatEmpleado(empleado)}
+                  >
+                    Contactar empleada
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

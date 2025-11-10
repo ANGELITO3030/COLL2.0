@@ -18,7 +18,7 @@ export default function ContactoEmpresaInfo({ goBack }) {
           <strong>Contacto:</strong> Evelin Arango
         </div>
         <div className="text-lg">
-          <strong>Correo:</strong> evelin.arango@collservice.com
+          <strong>Correo:</strong> soporte@collservice.com
         </div>
         <div className="text-lg">
           <strong>Teléfono:</strong> +57 301 456 7890

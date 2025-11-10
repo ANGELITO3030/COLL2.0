@@ -349,18 +349,63 @@ function App() {
               Datos Personales
             </a>
           </div>
+          <div style={{ marginTop: "20px", marginBottom: "20px", display: "flex", justifyContent: "center", alignItems: "center", gap: "30px" }}>
+            <a
+              href="https://instagram.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ 
+                color: "white", 
+                textDecoration: "none",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "16px"
+              }}
+            >
+              <img src="/insta.png" alt="Instagram" style={{ width: "24px", height: "24px" }} /> Instagram
+            </a>
+            <a
+              href="https://facebook.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ 
+                color: "white", 
+                textDecoration: "none",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "16px"
+              }}
+            >
+              
+              <img src="/face.png" alt="Facebook" style={{ width: "24px", height: "24px" }} /> Facebook
+            </a>
+
+                 <a
+              href="https://wa.me/573014567890"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ 
+                color: "white", 
+                textDecoration: "none",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "16px"
+              }}
+            >
+              
+              <img src="/whatsapp.png" alt="WhatsApp" style={{ width: "24px", height: "24px" }} /> WhatsApp
+            </a>
+           
+            
+          </div>
           <div style={{ fontWeight: "500", fontSize: "16px" }}>© {new Date().getFullYear()} Coll Service. Todos los derechos reservados.</div>
         </footer>
       </div>
 
-      <Routes>
-        <Route path="/" element={<Perfiles />} />
-        <Route path="/perfiles" element={<Perfiles />} />
-        <Route path="/chat" element={<ChatPage />} />
-        <Route path="/admin/chats" element={<AdminChatSupervision />} />
-        {/* ruta por defecto */}
-        <Route path="*" element={<Perfiles />} />
-      </Routes>
+     
     </Router>
   );
 }

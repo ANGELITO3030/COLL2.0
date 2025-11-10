@@ -5,12 +5,13 @@ const CHATS_KEY = "chats";
 const NOTIF_KEY = "notifications";
 const USER_KEY = "currentUser";
 
-export default function ChatPage() {
+export default function ChatPage(props) {
+  const { initialState, onClose } = props || {};
   const location = useLocation();
   const navigate = useNavigate();
   const scrollRef = useRef(null);
 
-  const state = location.state || {};
+  const state = initialState || location.state || {};
   const employee = state.employee || { id: new URLSearchParams(location.search).get("emp") || "unknown", nombre: "Empleada" };
   const role = state.role || "cliente"; // 'cliente' o 'empleada'
   const clientFromState = state.client || null;
@@ -33,7 +34,8 @@ export default function ChatPage() {
   useEffect(() => {
     try {
       const all = JSON.parse(localStorage.getItem(CHATS_KEY) || "[]");
-      const forEmployee = all.filter(m => m.employeeId === employee.id);
+      // normalize comparison to string to avoid number/string mismatches
+      const forEmployee = all.filter(m => String(m.employeeId) === String(employee.id));
       setMessages(forEmployee);
     } catch (e) {
       setMessages([]);
@@ -77,6 +79,7 @@ export default function ChatPage() {
     const sender = role === "empleada" ? "empleada" : "cliente";
     const msg = {
       id: `m_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+      // store employeeId as-is (could be number or string) but comparisons use String()
       employeeId: employee.id,
       from: sender,
       text: text.trim(),
@@ -94,7 +97,7 @@ export default function ChatPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: "28px auto", padding: 18 }}>
-      <button onClick={() => navigate(-1)} style={{ marginBottom: 12 }}>Volver</button>
+  <button onClick={() => { if (onClose) onClose(); else navigate(-1); }} style={{ marginBottom: 12 }}>Volver</button>
 
       <h2 style={{ color: "#4c3575" }}>{role === "empleada" && currentClient ? `Chat: ${currentClient.nombre} → ${employee.nombre}` : `Chat con ${employee.nombre}`}</h2>
 

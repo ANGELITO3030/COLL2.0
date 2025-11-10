@@ -63,7 +63,7 @@ export default function Header({ user = { name: "", role: "" }, onLoginClick, on
               if (typeof onNavigate === "function") onNavigate("inicio");
             }}
           >
-            Inicio
+            
           </a>
           <a
             href="#"

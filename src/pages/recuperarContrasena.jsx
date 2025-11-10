@@ -1,38 +1,53 @@
 import { useState } from "react";
+import axios from "axios";
 
 export default function RecuperarContrasena({ setView }) {
-  const [form, setForm] = useState({
-    email: ""
-  });
-  const [step, setStep] = useState(1); // 1: datos, 2: código, 3: éxito
+  const [form, setForm] = useState({ email: "" });
+  const [step, setStep] = useState(1); // 1: pedir email, 2: código, 3: nueva contraseña, 4: éxito
   const [error, setError] = useState("");
-  const [codigo, setCodigo] = useState("");
   const [codigoIngresado, setCodigoIngresado] = useState("");
+  const [debugCode, setDebugCode] = useState(null);
+  const [newPassword, setNewPassword] = useState("");
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    if (form.email) {
-      // Simular envío de código
-      const codigoGenerado = Math.floor(100000 + Math.random() * 900000).toString();
-      setCodigo(codigoGenerado);
+    if (!form.email) return setError("Por favor ingresa tu correo electrónico.");
+    try {
+      const res = await axios.post("http://localhost:5000/api/password/recover", { email: form.email });
+      // en desarrollo backend puede devolver debugCode para pruebas
+      if (res.data?.debugCode) setDebugCode(String(res.data.debugCode));
       setStep(2);
-    } else {
-      setError("Por favor ingresa tu correo electrónico.");
+    } catch (err) {
+      setError(err.response?.data?.error || "Error al solicitar código");
     }
   };
 
-  const handleCodigoSubmit = (e) => {
+  const handleCodigoSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    if (codigoIngresado === codigo) {
+    if (!codigoIngresado) return setError("Ingresa el código");
+    try {
+      await axios.post("http://localhost:5000/api/password/verify", { email: form.email, code: codigoIngresado });
       setStep(3);
-    } else {
-      setError("El código ingresado es incorrecto. Verifica tu correo electrónico.");
+    } catch (err) {
+      setError(err.response?.data?.error || "Código inválido");
+    }
+  };
+
+  const handleResetSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!newPassword || newPassword.length < 6) return setError("La contraseña debe tener al menos 6 caracteres");
+    try {
+      await axios.post("http://localhost:5000/api/password/reset", { email: form.email, code: codigoIngresado, newPassword });
+      setStep(4);
+    } catch (err) {
+      setError(err.response?.data?.error || "Error al cambiar la contraseña");
     }
   };
 
@@ -142,18 +157,40 @@ export default function RecuperarContrasena({ setView }) {
                 required
               />
             </div>
-            <div style={{ fontSize: 13, color: '#888', marginBottom: 10 }}>
-              (Simulación: tu código es <b>{codigo}</b>)
-            </div>
+            {debugCode && (
+              <div style={{ fontSize: 13, color: '#888', marginBottom: 10 }}>
+                (Simulación: tu código es <b>{debugCode}</b>)
+              </div>
+            )}
             <button type="submit" className="btn-login">
               Verificar código
             </button>
             {error && <div style={{ color: '#e74c3c', marginTop: 10 }}>{error}</div>}
           </form>
         )}
+
         {step === 3 && (
+          <form onSubmit={handleResetSubmit}>
+            <div className="input-group">
+              <label htmlFor="newpass">Nueva contraseña</label>
+              <input
+                type="password"
+                id="newpass"
+                name="newpass"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                placeholder="Nueva contraseña (mín 6 caracteres)"
+                required
+              />
+            </div>
+            <button type="submit" className="btn-login">Cambiar contraseña</button>
+            {error && <div style={{ color: '#e74c3c', marginTop: 10 }}>{error}</div>}
+          </form>
+        )}
+
+        {step === 4 && (
           <div style={{ color: '#27ae60', marginTop: 20, fontWeight: 600, fontSize: 16 }}>
-            Código verificado correctamente. Pronto recibirás instrucciones para restablecer tu contraseña.
+            Contraseña cambiada con éxito. Ahora puedes iniciar sesión con tu nueva contraseña.
           </div>
         )}
         <div className="extra" style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>

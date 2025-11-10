@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import StarRating from "../components/StarRating";
 import { useNavigate } from "react-router-dom";
 
 export default function Empleado() {
@@ -73,7 +74,9 @@ export default function Empleado() {
 
           <div style={{ marginTop: 14, display: "flex", gap: 12, alignItems: "center" }}>
             <div style={{ background: "#f7f2f8", color: "#c2185b", padding: "6px 10px", borderRadius: 16, fontWeight: 700 }}>{empleado.especialidad}</div>
-            <div style={{ color: "#444" }}>Calificación: <strong>{empleado.calificacion}</strong> ⭐</div>
+            <div style={{ color: "#444" }}>Calificación: <strong style={{ marginRight: 8 }}>
+              <StarRating employeeId={empleado.id} />
+            </strong></div>
             <div style={{ marginLeft: "auto" }}>
               <button style={{ background: "#e76bb2", color: "#fff", border: "none", padding: "8px 14px", borderRadius: 8, cursor: "pointer" }}>Solicitar servicio</button>
             </div>
