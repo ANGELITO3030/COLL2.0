@@ -8,45 +8,96 @@ export default function RegistroAdministrador({ goBack }) {
   const [aceptaTerminos, setAceptaTerminos] = useState(false);
 
   const [form, setForm] = useState({
+    usuario_admin: "",
     nombre: "",
+    apellido: "",
     correo: "",
     telefono: "",
-    usuario_admin: "",
-    contrasena: "",
-    confirmarContrasena: "",
+    direccion: "",
     cargo: "",
     area: "",
-    tipo_acceso: "Normal",
-    fecha_contratacion: "",
-    fecha_registro: new Date().toISOString().split("T")[0], // 👈 fecha actual por defecto
+    contrasena: "",
+    confirmarContrasena: "",
+    fecha_registro: new Date().toISOString().split("T")[0],
   });
 
   const validarCampo = (name, value) => {
     let error = "";
 
-    if (name === "nombre" && !/^[a-zA-ZÁÉÍÓÚáéíóúñÑ\s]+$/.test(value))
-      error = "El nombre solo puede contener letras.";
-    if (name === "correo" && !/\S+@\S+\.\S+/.test(value))
-      error = "Ingresa un correo electrónico válido.";
-    if (name === "telefono" && value && !/^\d{7,10}$/.test(value))
-      error = "El teléfono debe tener entre 7 y 10 dígitos numéricos.";
-    if (name === "contrasena" && value.length < 6)
-      error = "La contraseña debe tener al menos 6 caracteres.";
-    if (name === "confirmarContrasena" && value !== form.contrasena)
-      error = "Las contraseñas no coinciden.";
-    if (name === "cargo" && !/^[a-zA-ZÁÉÍÓÚáéíóúñÑ\s]+$/.test(value))
-      error = "El cargo solo puede contener letras.";
-    if (name === "area" && !/^[a-zA-ZÁÉÍÓÚáéíóúñÑ\s]+$/.test(value))
-      error = "El área solo puede contener letras.";
+    const validaciones = {
+      nombre: () => {
+        if (!value.trim()) return "El nombre es obligatorio.";
+        if (!/^[a-zA-ZÁÉÍÓÚáéíóúñÑ\s]+$/.test(value))
+          return "El nombre solo puede contener letras.";
+        return "";
+      },
+      apellido: () => {
+        if (!value.trim()) return "";
+        if (!/^[a-zA-ZÁÉÍÓÚáéíóúñÑ\s]+$/.test(value))
+          return "El apellido solo puede contener letras.";
+        return "";
+      },
+      correo: () => {
+        if (!value.trim()) return "El correo es obligatorio.";
+        if (!/\S+@\S+\.\S+/.test(value))
+          return "Ingresa un correo electrónico válido.";
+        return "";
+      },
+      telefono: () => {
+        if (value && !/^\d{7,10}$/.test(value))
+          return "El teléfono debe tener entre 7 y 10 dígitos.";
+        return "";
+      },
+      direccion: () => {
+        if (value && value.length < 5)
+          return "La dirección debe tener al menos 5 caracteres.";
+        return "";
+      },
+      cargo: () => {
+        if (!value.trim()) return "El cargo es obligatorio.";
+        if (!/^[a-zA-ZÁÉÍÓÚáéíóúñÑ\s]+$/.test(value))
+          return "El cargo solo puede contener letras.";
+        return "";
+      },
+      area: () => {
+        if (!value.trim()) return "El área es obligatorio.";
+        if (!/^[a-zA-ZÁÉÍÓÚáéíóúñÑ\s]+$/.test(value))
+          return "El área solo puede contener letras.";
+        return "";
+      },
+      usuario_admin: () => {
+        if (!value.trim()) return "El usuario es obligatorio.";
+        if (!/^[a-zA-Z0-9]+$/.test(value))
+          return "El usuario solo puede contener letras y números.";
+        if (value.length < 3)
+          return "El usuario debe tener al menos 3 caracteres.";
+        return "";
+      },
+      contrasena: () => {
+        if (!value.trim()) return "La contraseña es obligatoria.";
+        if (value.length < 6)
+          return "La contraseña debe tener al menos 6 caracteres.";
+        return "";
+      },
+      confirmarContrasena: () => {
+        if (!value.trim()) return "Confirma la contraseña.";
+        if (value !== form.contrasena)
+          return "Las contraseñas no coinciden.";
+        return "";
+      }
+    };
+
+    if (validaciones[name]) {
+      error = validaciones[name]();
+    }
 
     setErrors((prev) => ({ ...prev, [name]: error }));
   };
 
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    const val = type === "checkbox" ? checked : value;
-    setForm((prev) => ({ ...prev, [name]: val }));
-    if (touched[name]) validarCampo(name, val);
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+    if (touched[name]) validarCampo(name, value);
   };
 
   const handleBlur = (e) => {
@@ -58,36 +109,17 @@ export default function RegistroAdministrador({ goBack }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    setTouched({
-      nombre: true,
-      correo: true,
-      telefono: true,
-      usuario_admin: true,
-      contrasena: true,
-      confirmarContrasena: true,
-      cargo: true,
-      area: true,
-      fecha_contratacion: true,
-    });
+    // Marcar todos los campos como tocados
+    const campos = Object.keys(form).filter(key => key !== 'fecha_registro');
+    const nuevoTouched = {};
+    campos.forEach(campo => { nuevoTouched[campo] = true; });
+    setTouched(nuevoTouched);
 
+    // Validar todos los campos
     Object.keys(form).forEach((key) => validarCampo(key, form[key]));
 
-    if (
-      !form.nombre ||
-      !form.correo ||
-      !form.usuario_admin ||
-      !form.contrasena ||
-      !form.confirmarContrasena ||
-      !form.cargo ||
-      !form.area
-    ) {
-      alert(
-        "Por favor complete todos los campos obligatorios: nombre, correo, usuario, contraseña, confirmar contraseña, cargo y área."
-      );
-      return;
-    }
-
-    const hayErrores = Object.values(errors).some((err) => err);
+    // Verificar errores
+    const hayErrores = Object.values(errors).some(err => err);
     if (hayErrores) {
       alert("Por favor corrige los errores antes de continuar.");
       return;
@@ -105,34 +137,52 @@ export default function RegistroAdministrador({ goBack }) {
 
     try {
       setLoading(true);
+      
+      // Preparar datos para enviar (sin confirmarContrasena)
       const { confirmarContrasena, ...datosEnvio } = form;
+      
+      // Asegurar que campos opcionales vacíos se envíen como null
+      const datosFinales = {
+        ...datosEnvio,
+        apellido: datosEnvio.apellido.trim() === "" ? null : datosEnvio.apellido,
+        telefono: datosEnvio.telefono.trim() === "" ? null : datosEnvio.telefono,
+        direccion: datosEnvio.direccion.trim() === "" ? null : datosEnvio.direccion
+      };
+      
+      console.log('Enviando datos:', datosFinales);
+      
       const res = await axios.post(
         "http://localhost:5000/api/administradores/registro",
-        datosEnvio,
+        datosFinales,
         { headers: { "Content-Type": "application/json" } }
       );
-      alert(res.data?.mensaje || "Administrador registrado con éxito ✅");
+      
+      alert(res.data?.mensaje || "✅ Administrador registrado con éxito");
+      
+      // Limpiar formulario
       setForm({
+        usuario_admin: "",
         nombre: "",
+        apellido: "",
         correo: "",
         telefono: "",
-        usuario_admin: "",
-        contrasena: "",
-        confirmarContrasena: "",
+        direccion: "",
         cargo: "",
         area: "",
-        tipo_acceso: "Normal",
-        fecha_contratacion: "",
-        fecha_registro: new Date().toISOString().split("T")[0], // 👈 reinicia con la fecha actual
+        contrasena: "",
+        confirmarContrasena: "",
+        fecha_registro: new Date().toISOString().split("T")[0],
       });
+      
       setErrors({});
       setTouched({});
       setAceptaTerminos(false);
+      
       if (typeof goBack === "function") goBack();
+      
     } catch (err) {
       console.error(err);
-      const msg =
-        err?.response?.data?.error || "Error al registrar administrador";
+      const msg = err?.response?.data?.error || "Error al registrar administrador ❌";
       alert(msg);
     } finally {
       setLoading(false);
@@ -152,18 +202,23 @@ export default function RegistroAdministrador({ goBack }) {
 
         <form onSubmit={handleSubmit} noValidate>
           {[
-            { name: "nombre", label: "Nombre completo", placeholder: "Ej: María López" },
-            { name: "correo", label: "Correo electrónico", type: "email", placeholder: "Ej: admin@empresa.com" },
-            { name: "telefono", label: "Teléfono (opcional)", type: "tel", placeholder: "Solo números" },
-            { name: "usuario_admin", label: "Usuario (ID)", placeholder: "Ej: admin123" },
-            { name: "contrasena", label: "Contraseña", type: "password", placeholder: "Mínimo 6 caracteres" },
-            { name: "confirmarContrasena", label: "Confirmar Contraseña", type: "password", placeholder: "Repite la contraseña" },
-            { name: "cargo", label: "Cargo", placeholder: "Ej: Coordinador de Operaciones" },
-            { name: "area", label: "Área", placeholder: "Ej: Recursos Humanos" },
-            { name: "fecha_registro", label: "Fecha de registro", type: "date", readOnly: true },
+            { name: "usuario_admin", label: "Usuario (ID) *", placeholder: "Ej: admin123", required: true },
+            { name: "nombre", label: "Nombre *", placeholder: "Ej: María", required: true },
+            { name: "apellido", label: "Apellido", placeholder: "Ej: López (opcional)", required: false },
+            { name: "correo", label: "Correo electrónico *", type: "email", placeholder: "Ej: admin@empresa.com", required: true },
+            { name: "telefono", label: "Teléfono", type: "tel", placeholder: "Solo números (7-10 dígitos)", required: false },
+            { name: "direccion", label: "Dirección", placeholder: "Ej: Calle 123 #45-67", required: false },
+            { name: "cargo", label: "Cargo *", placeholder: "Ej: Coordinador de Operaciones", required: true },
+            { name: "area", label: "Área *", placeholder: "Ej: Recursos Humanos", required: true },
+            { name: "fecha_registro", label: "Fecha de registro", type: "date", required: false },
+            { name: "contrasena", label: "Contraseña *", type: "password", placeholder: "Mínimo 6 caracteres", required: true },
+            { name: "confirmarContrasena", label: "Confirmar Contraseña *", type: "password", placeholder: "Repite la contraseña", required: true },
           ].map((field) => (
             <div key={field.name} style={styles.inputGroup}>
-              <label style={styles.label}>{field.label}</label>
+              <label style={styles.label}>
+                {field.label} {field.required && <span style={{color: "red"}}>*</span>}
+              </label>
+              
               <input
                 name={field.name}
                 type={field.type || "text"}
@@ -173,28 +228,23 @@ export default function RegistroAdministrador({ goBack }) {
                 style={{
                   ...styles.input,
                   borderColor: errors[field.name] ? "red" : "#7b68ee",
+                  backgroundColor: field.name === "fecha_registro" ? "#eee" : "white",
+                  cursor: field.name === "fecha_registro" ? "not-allowed" : "text"
                 }}
                 placeholder={field.placeholder}
-                readOnly={field.readOnly}
-                required={field.name !== "telefono"}
+                required={field.required}
+                readOnly={field.name === "fecha_registro"}
               />
+              
               {touched[field.name] && errors[field.name] && (
                 <span style={styles.error}>{errors[field.name]}</span>
               )}
             </div>
           ))}
 
-          {/* 🔹 Términos y condiciones */}
-          <div
-            style={{
-              ...styles.inputGroup,
-              flexDirection: "row",
-              alignItems: "center",
-            }}
-          >
+          <div style={{ ...styles.inputGroup, flexDirection: "row", alignItems: "center" }}>
             <input
               type="checkbox"
-              name="aceptaTerminos"
               checked={aceptaTerminos}
               onChange={(e) => setAceptaTerminos(e.target.checked)}
               style={{ marginRight: 8 }}
@@ -213,6 +263,7 @@ export default function RegistroAdministrador({ goBack }) {
   );
 }
 
+// ESTILOS ORIGINALES
 const styles = {
   body: {
     fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
@@ -229,11 +280,33 @@ const styles = {
     width: 420,
     padding: 24,
   },
-  title: { textAlign: "center", marginBottom: 16, color: "#4b2879" },
-  inputGroup: { marginBottom: 12, display: "flex", flexDirection: "column" },
-  label: { fontWeight: 600, marginBottom: 6, color: "#4b2879" },
-  input: { padding: 8, borderRadius: 6, border: "1px solid #7b68ee" },
-  error: { color: "red", fontSize: "0.8em", marginTop: 4 },
+  title: { 
+    textAlign: "center", 
+    marginBottom: 16, 
+    color: "#4b2879"
+  },
+  inputGroup: { 
+    marginBottom: 12, 
+    display: "flex", 
+    flexDirection: "column" 
+  },
+  label: { 
+    fontWeight: 600, 
+    marginBottom: 6, 
+    color: "#4b2879"
+  },
+  input: { 
+    padding: 8, 
+    borderRadius: 6, 
+    border: "1px solid #7b68ee",
+    fontSize: "14px",
+    outline: "none"
+  },
+  error: { 
+    color: "red", 
+    fontSize: "0.8em", 
+    marginTop: 4 
+  },
   button: {
     padding: "10px 14px",
     background: "#6d4ad9",

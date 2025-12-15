@@ -3,34 +3,15 @@ const express = require('express');
 const cors = require('cors');
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Mailer
-const nodemailer = require('nodemailer');
-
-// In-memory store for reset codes: { email: { code, expires, role, identifier } }
-const resetStore = {};
-
-// Create transporter when SMTP env available
-let transporter = null;
-if (process.env.SMTP_HOST && process.env.SMTP_USER) {
-  transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || '587', 10),
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    }
-  });
-}
-
-// ==========================
 // Pool de conexiones a MySQL
-// ==========================
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
@@ -42,50 +23,46 @@ const pool = mysql.createPool({
   charset: 'utf8mb4'
 });
 
-// Ensure password_resets table exists (for persistent reset tokens)
-;(async () => {
-  try {
-    await pool.execute(`
-      CREATE TABLE IF NOT EXISTS password_resets (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        email VARCHAR(255) NOT NULL,
-        code VARCHAR(12) NOT NULL,
-        expires_at BIGINT NOT NULL,
-        role VARCHAR(50),
-        identifier VARCHAR(255),
-        used TINYINT(1) DEFAULT 0,
-        created_at BIGINT NOT NULL,
-        INDEX(email),
-        INDEX(code),
-        INDEX(expires_at)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    `);
-  } catch (err) {
-    console.error('Error creating password_resets table:', err);
-  }
-  // Create ratings table
-  try {
-    await pool.execute(`
-      CREATE TABLE IF NOT EXISTS ratings (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        employee_id VARCHAR(128) NOT NULL,
-        voter_id VARCHAR(128) NOT NULL,
-        rating TINYINT NOT NULL,
-        comment TEXT DEFAULT NULL,
-        created_at BIGINT NOT NULL,
-        updated_at BIGINT DEFAULT NULL,
-        UNIQUE KEY unique_vote (employee_id, voter_id),
-        INDEX(employee_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    `);
-  } catch (err) {
-    console.error('Error creating ratings table:', err);
-  }
-})();
+// Crear directorio uploads si no existe
+const uploadDir = 'uploads/empleadas';
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
 
-// ==========================
+// Configurar almacenamiento de archivos
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const cedula = req.body.cedula || 'sin-cedula';
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    const filename = `${cedula}-${file.fieldname}-${uniqueSuffix}${ext}`;
+    cb(null, filename);
+  }
+});
+
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: function (req, file, cb) {
+    const allowedTypes = /jpeg|jpg|png|pdf/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Solo se permiten archivos PDF, JPG, JPEG o PNG'));
+    }
+  }
+});
+
+// Middleware para servir archivos subidos
+app.use('/uploads', express.static('uploads'));
+
 // Ruta de prueba
-// ==========================
 app.get('/api/ping', async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT 1 + 1 AS result');
@@ -97,49 +74,350 @@ app.get('/api/ping', async (req, res) => {
 });
 
 // ==========================
-// Registro de Administrador
+// REGISTRO DE EMPLEADA (CON TODOS LOS CAMPOS)
+// ==========================
+app.post('/api/empleadas/registro', upload.fields([
+  { name: 'antecedentes_penales', maxCount: 1 },
+  { name: 'antecedentes_judiciales', maxCount: 1 }
+]), async (req, res) => {
+  const connection = await pool.getConnection();
+  
+  try {
+    await connection.beginTransaction();
+
+    const {
+      nombre,
+      apellido,
+      cedula,
+      fecha_nacimiento,  // ✅ Ahora SÍ existe en la tabla
+      correo,
+      telefono,
+      direccion,
+      experiencia,
+      disponibilidad,
+      contrasena,
+      confirmarContrasena,
+      aceptar_terminos,
+      fecha_registro     // ✅ Ahora SÍ existe en la tabla
+    } = req.body;
+
+    console.log('📥 Datos recibidos para empleada:', {
+      nombre, apellido, cedula, correo, telefono
+    });
+
+    // Validaciones básicas
+    if (!nombre || !apellido || !cedula || !correo || !contrasena) {
+      return res.status(400).json({ 
+        error: 'Faltan campos obligatorios: nombre, apellido, cédula, correo o contraseña' 
+      });
+    }
+
+    // Validar que las contraseñas coincidan
+    if (contrasena !== confirmarContrasena) {
+      return res.status(400).json({ 
+        error: 'Las contraseñas no coinciden' 
+      });
+    }
+
+    // Validar términos y condiciones
+    if (!aceptar_terminos || aceptar_terminos === 'false') {
+      return res.status(400).json({ 
+        error: 'Debe aceptar los términos y condiciones' 
+      });
+    }
+
+    // Validar formato de cédula
+    if (!/^[0-9]{6,12}$/.test(cedula)) {
+      return res.status(400).json({ 
+        error: 'La cédula debe tener entre 6 y 12 dígitos' 
+      });
+    }
+
+    // Validar formato de correo
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) {
+      return res.status(400).json({ 
+        error: 'Formato de correo electrónico inválido' 
+      });
+    }
+
+    // Validar teléfono
+    if (telefono && !/^[0-9]{7,15}$/.test(telefono)) {
+      return res.status(400).json({ 
+        error: 'El teléfono debe tener entre 7 y 15 dígitos' 
+      });
+    }
+
+    // Validar fecha de nacimiento (si se proporciona)
+    if (fecha_nacimiento) {
+      const fechaNac = new Date(fecha_nacimiento);
+      const hoy = new Date();
+      const edad = hoy.getFullYear() - fechaNac.getFullYear();
+      
+      if (edad < 18) {
+        return res.status(400).json({ 
+          error: 'La empleada debe ser mayor de edad' 
+        });
+      }
+    }
+
+    // Verificar duplicados
+    const [existingCedula] = await connection.query(
+      'SELECT documento_empleado FROM empleado WHERE documento_empleado = ?',
+      [cedula]
+    );
+    
+    if (existingCedula.length > 0) {
+      return res.status(409).json({ error: 'La cédula ya está registrada' });
+    }
+
+    const [existingEmail] = await connection.query(
+      'SELECT correo_empleado FROM empleado WHERE correo_empleado = ?',
+      [correo]
+    );
+    
+    if (existingEmail.length > 0) {
+      return res.status(409).json({ error: 'El correo ya está registrado' });
+    }
+
+    // Validar que se hayan subido los archivos
+    if (!req.files?.antecedentes_penales) {
+      return res.status(400).json({ 
+        error: 'Debe adjuntar el certificado de antecedentes penales' 
+      });
+    }
+
+    if (!req.files?.antecedentes_judiciales) {
+      return res.status(400).json({ 
+        error: 'Debe adjuntar el certificado de antecedentes judiciales' 
+      });
+    }
+
+    // Hashear contraseña
+    const hashedPassword = await bcrypt.hash(contrasena, 10);
+
+    // INSERTAR CON TODOS LOS CAMPOS (13 campos)
+    const sql = `
+      INSERT INTO empleado (
+        documento_empleado,      -- 1. cedula
+        nombre_empleado,         -- 2. nombre
+        apellido_empleado,       -- 3. apellido
+        correo_empleado,         -- 4. correo
+        contrasena_empleado,     -- 5. contrasena (hasheada)
+        telefono_empleado,       -- 6. telefono
+        direccion_empleado,      -- 7. direccion
+        perfil_laboral,          -- 8. valor fijo
+        experiencia_laboral,     -- 9. experiencia
+        servicios_realizados,    -- 10. valor fijo
+        disponibilidad,          -- 11. disponibilidad
+        fecha_nacimiento,        -- 12. fecha_nacimiento (NUEVO)
+        fecha_registro           -- 13. fecha_registro (NUEVO)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const valores = [
+      cedula,                    // 1. documento_empleado
+      nombre,                   // 2. nombre_empleado
+      apellido,                 // 3. apellido_empleado
+      correo,                   // 4. correo_empleado
+      hashedPassword,           // 5. contrasena_empleado
+      telefono || null,         // 6. telefono_empleado
+      direccion || null,        // 7. direccion_empleado
+      'Empleada doméstica',     // 8. perfil_laboral
+      experiencia || 'Sin experiencia especificada', // 9. experiencia_laboral
+      'Ninguno',                // 10. servicios_realizados
+      disponibilidad || 'Disponibilidad no especificada', // 11. disponibilidad
+      fecha_nacimiento || null, // 12. fecha_nacimiento (puede ser NULL)
+      fecha_registro || new Date().toISOString().split('T')[0] // 13. fecha_registro
+    ];
+
+    console.log('📤 Insertando empleada con 13 campos:', valores);
+
+    await connection.execute(sql, valores);
+    await connection.commit();
+
+    return res.json({ 
+      mensaje: '✅ Empleada registrada con éxito',
+      success: true,
+      empleada: {
+        nombre: nombre,
+        apellido: apellido,
+        cedula: cedula,
+        correo: correo,
+        telefono: telefono,
+        fecha_nacimiento: fecha_nacimiento || 'No especificada',
+        fecha_registro: fecha_registro || new Date().toISOString().split('T')[0]
+      }
+    });
+    
+  } catch (err) {
+    await connection.rollback();
+    
+    // Eliminar archivos si hubo error
+    if (req.files) {
+      Object.values(req.files).forEach(fileArray => {
+        fileArray.forEach(file => {
+          const filePath = path.join(uploadDir, file.filename);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        });
+      });
+    }
+    
+    console.error('❌ ERROR en registro de empleada:', err);
+    
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ error: 'El registro ya existe en la base de datos' });
+    }
+    
+    if (err.code === 'ER_BAD_FIELD_ERROR') {
+      return res.status(500).json({ 
+        error: 'Error: Falta alguna columna en la tabla. Ejecuta: ALTER TABLE empleado ADD COLUMN fecha_nacimiento DATE, ADD COLUMN fecha_registro DATE DEFAULT CURRENT_DATE;' 
+      });
+    }
+    
+    if (err.message && err.message.includes('Solo se permiten archivos')) {
+      return res.status(400).json({ error: err.message });
+    }
+    
+    return res.status(500).json({ error: 'Error interno del servidor: ' + err.message });
+  } finally {
+    connection.release();
+  }
+});
+
+// ==========================
+// REGISTRO DE ADMINISTRADOR 
 // ==========================
 app.post('/api/administradores/registro', async (req, res) => {
   try {
-    const { nombre, correo, telefono, usuario_admin, contrasena, cargo, area, tipo_acceso } = req.body;
+    const { 
+      usuario_admin,
+      nombre,
+      apellido,
+      correo,
+      telefono,
+      direccion,
+      cargo,
+      area,
+      contrasena,
+      fecha_registro
+    } = req.body;
 
-    if (!usuario_admin || !nombre || !correo || !contrasena || !cargo || !area) {
-      return res.status(400).json({ error: 'Faltan campos obligatorios. Por favor complete: usuario, nombre, correo, contraseña, cargo y área.' });
+    console.log('📥 Datos recibidos:', req.body);
+
+    // Validar campos obligatorios
+    const camposObligatorios = ['usuario_admin', 'nombre', 'correo', 'contrasena', 'cargo', 'area'];
+    const faltan = camposObligatorios.filter(campo => {
+      const valor = req.body[campo];
+      return !valor || valor.toString().trim() === '';
+    });
+    
+    if (faltan.length > 0) {
+      return res.status(400).json({ 
+        error: `Faltan campos obligatorios: ${faltan.join(', ')}` 
+      });
     }
 
+    // Validaciones específicas
+    if (!/^[a-zA-Z0-9]+$/.test(usuario_admin)) {
+      return res.status(400).json({ 
+        error: 'El usuario solo puede contener letras y números' 
+      });
+    }
+
+    if (!/\S+@\S+\.\S+/.test(correo)) {
+      return res.status(400).json({ 
+        error: 'Formato de correo electrónico inválido' 
+      });
+    }
+
+    if (contrasena.length < 6) {
+      return res.status(400).json({ 
+        error: 'La contraseña debe tener al menos 6 caracteres' 
+      });
+    }
+
+    // Verificar duplicados
+    const [existingUser] = await pool.query(
+      'SELECT documento_admin FROM administrador WHERE documento_admin = ?',
+      [usuario_admin]
+    );
+    
+    if (existingUser.length > 0) {
+      return res.status(409).json({ error: 'El usuario ya está registrado' });
+    }
+
+    const [existingEmail] = await pool.query(
+      'SELECT correo_admin FROM administrador WHERE correo_admin = ?',
+      [correo]
+    );
+    
+    if (existingEmail.length > 0) {
+      return res.status(409).json({ error: 'El correo ya está registrado' });
+    }
+
+    // Hashear contraseña
     const hashed = await bcrypt.hash(contrasena, 10);
 
+    // Preparar valores
+    const fechaRegistroValida = fecha_registro && fecha_registro.trim() !== '' 
+      ? fecha_registro 
+      : new Date().toISOString().split('T')[0];
+
+    const valores = [
+      usuario_admin,
+      nombre,
+      apellido && apellido.trim() !== '' ? apellido : null,
+      telefono && telefono.trim() !== '' ? telefono : null,
+      direccion && direccion.trim() !== '' ? direccion : null,
+      correo,
+      hashed,
+      cargo,
+      area,
+      fechaRegistroValida
+    ];
+
+    console.log('📤 Valores a insertar:', valores);
+
+    // Insertar en la base de datos
     const sql = `
       INSERT INTO administrador (
         documento_admin,
         nombre_admin,
+        apellido_admin,
         telefono_admin,
+        direccion_admin,
+        correo_admin,
+        contraseña_admin,
         cargo,
         area,
-        nivel_acceso,
-        correo_admin,
-        contraseña_admin
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        fecha_registro
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
-    await pool.execute(sql, [
-      usuario_admin,
-      nombre,
-      telefono || null,
-      cargo,
-      area,
-      tipo_acceso,
-      correo,
-      hashed
-    ]);
+    await pool.execute(sql, valores);
 
-    return res.json({ mensaje: 'Administrador registrado con éxito ✅' });
+    return res.json({ 
+      mensaje: '✅ Administrador registrado con éxito',
+      success: true,
+      usuario: usuario_admin,
+      nombre: nombre,
+      cargo: cargo
+    });
+    
   } catch (err) {
-    console.error('ERROR DETALLADO:', err);
+    console.error('❌ ERROR:', err);
+    
     if (err.code === 'ER_DUP_ENTRY') {
-      return res.status(409).json({ error: 'Documento o correo ya registrado' });
+      return res.status(409).json({ error: 'El registro ya existe en la base de datos' });
     }
-    return res.status(500).json({ error: err.message });
+    
+    if (err.code === 'ER_BAD_FIELD_ERROR') {
+      return res.status(500).json({ error: 'Error en la estructura de la base de datos' });
+    }
+    
+    return res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
 
@@ -147,8 +425,14 @@ app.post('/api/administradores/registro', async (req, res) => {
 // Registro de Cliente
 // ==========================
 app.post('/api/clientes/registro', async (req, res) => {
+  const connection = await pool.getConnection();
+  
   try {
+    await connection.beginTransaction();
+    
     const {
+      tipo_cliente,
+      tipo_documento,
       documento_cliente,
       nombre_cliente,
       apellido_cliente,
@@ -156,117 +440,184 @@ app.post('/api/clientes/registro', async (req, res) => {
       telefono_cliente,
       correo_cliente,
       contrasena,
-      historial_servicios
+      historial_servicios,
+      razon_social,
+      nit_empresa,
+      representante_legal,
+      correo_empresa,
+      telefono_empresa,
+      fecha_registro
     } = req.body;
 
-    if (!documento_cliente || !nombre_cliente || !correo_cliente || !contrasena) {
-      return res.status(400).json({ error: 'Faltan campos obligatorios (documento, nombre, correo, contrasena).' });
+    if (!tipo_cliente) {
+      throw { 
+        status: 400, 
+        message: 'Seleccione el tipo de cliente (Persona o Empresa).' 
+      };
     }
 
     const hashed = await bcrypt.hash(contrasena, 10);
 
-    const sql = `
-      INSERT INTO cliente (
+    // PERSONA NATURAL
+    if (tipo_cliente === "Persona") {
+      if (!documento_cliente || !nombre_cliente || !correo_cliente || !contrasena) {
+        throw { 
+          status: 400, 
+          message: 'Para Persona Natural, complete: documento, nombre, correo y contraseña.' 
+        };
+      }
+
+      const tiposValidos = ['CC', 'CE', 'PA', 'TI'];
+      if (tipo_documento && !tiposValidos.includes(tipo_documento)) {
+        throw { 
+          status: 400, 
+          message: 'Tipo de documento no válido. Use: CC, CE, PA o TI.' 
+        };
+      }
+
+      const [existingDoc] = await connection.query(
+        'SELECT documento_cliente FROM cliente WHERE documento_cliente = ?',
+        [documento_cliente]
+      );
+      
+      if (existingDoc.length > 0) {
+        throw { status: 409, message: 'El documento ya está registrado' };
+      }
+
+      const [existingEmail] = await connection.query(
+        'SELECT correo_cliente FROM cliente WHERE correo_cliente = ?',
+        [correo_cliente]
+      );
+      
+      if (existingEmail.length > 0) {
+        throw { status: 409, message: 'El correo ya está registrado' };
+      }
+
+      const sqlCliente = `
+        INSERT INTO cliente (
+          documento_cliente,
+          tipo_doc_cliente,
+          nombre_cliente,
+          apellido_cliente,
+          direccion_cliente,
+          telefono_cliente,
+          correo_cliente,
+          contrasena,
+          historial_servicios
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      await connection.execute(sqlCliente, [
         documento_cliente,
+        tipo_documento || null,
         nombre_cliente,
-        apellido_cliente,
-        direccion_cliente,
-        telefono_cliente,
+        apellido_cliente || null,
+        direccion_cliente || null,
+        telefono_cliente || null,
         correo_cliente,
-        contrasena,
-        historial_servicios
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `;
+        hashed,
+        historial_servicios || null
+      ]);
 
-    await pool.execute(sql, [
-      documento_cliente,
-      nombre_cliente,
-      apellido_cliente || null,
-      direccion_cliente || null,
-      telefono_cliente || null,
-      correo_cliente,
-      hashed,
-      historial_servicios || null
-    ]);
+      await connection.commit();
+      return res.json({ 
+        mensaje: '✅ Persona Natural registrada con éxito',
+        tipo: 'persona',
+        success: true
+      });
+    }
 
-    return res.json({ mensaje: 'Cliente registrado con éxito ✅' });
+    // EMPRESA
+    else if (tipo_cliente === "Empresa") {
+      if (!razon_social || !nit_empresa || !correo_empresa || !contrasena) {
+        throw { 
+          status: 400, 
+          message: 'Para Empresa, complete: razón social, NIT, correo empresarial y contraseña.' 
+        };
+      }
+
+      const [existingNIT] = await connection.query(
+        'SELECT nlt FROM empresa WHERE nlt = ?',
+        [nit_empresa]
+      );
+      
+      if (existingNIT.length > 0) {
+        throw { status: 409, message: 'El NIT ya está registrado' };
+      }
+
+      const [existingEmail] = await connection.query(
+        'SELECT correo_empresa FROM empresa WHERE correo_empresa = ?',
+        [correo_empresa]
+      );
+      
+      if (existingEmail.length > 0) {
+        throw { status: 409, message: 'El correo empresarial ya está registrado' };
+      }
+
+      const sqlEmpresa = `
+        INSERT INTO empresa (
+          razon_social,
+          nlt,
+          representante_legal,
+          direccion,
+          telefono_empresa,
+          correo_empresa,
+          contrasena,
+          fecha_registro
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      await connection.execute(sqlEmpresa, [
+        razon_social,
+        nit_empresa,
+        representante_legal || null,
+        direccion_cliente || null,
+        telefono_empresa || null,
+        correo_empresa,
+        hashed,
+        fecha_registro || new Date().toISOString().split('T')[0]
+      ]);
+
+      await connection.commit();
+      return res.json({ 
+        mensaje: '✅ Empresa registrada con éxito',
+        tipo: 'empresa',
+        success: true
+      });
+    }
+    else {
+      throw { 
+        status: 400, 
+        message: 'Tipo de cliente no válido. Use: "Persona" o "Empresa".' 
+      };
+    }
+    
   } catch (err) {
-    console.error('ERROR DETALLADO:', err);
+    await connection.rollback();
+    connection.release();
+    
+    console.error('ERROR en /api/clientes/registro:', err);
+    
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
+    
     if (err.code === 'ER_DUP_ENTRY') {
-      return res.status(409).json({ error: 'Documento o correo ya registrado' });
+      return res.status(409).json({ error: 'El registro ya existe en la base de datos' });
     }
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-// ==========================
-// Registro de Empleado
-// ==========================
-app.post('/api/empleadas/registro', async (req, res) => {
-  try {
-    const {
-      documento_empleado,
-      nombre_empleado,
-      apellido_empleado,
-      telefono_empleado,
-      direccion_empleado,
-      perfil_laboral,
-      experiencia_laboral,
-      servicios_realizados,
-      disponibilidad,
-      correo_empleado,
-      contrasena_empleado
-    } = req.body;
-
-    if (!documento_empleado || !nombre_empleado || !apellido_empleado || !correo_empleado || !contrasena_empleado) {
-      return res.status(400).json({ error: 'Faltan campos obligatorios.' });
+    
+    if (err.code === 'ER_BAD_FIELD_ERROR') {
+      return res.status(500).json({ 
+        error: 'Error en la estructura de la base de datos' 
+      });
     }
-
-    const hashed = await bcrypt.hash(contrasena_empleado, 10);
-
-    const sql = `
-      INSERT INTO empleado (
-        documento_empleado,
-        nombre_empleado,
-        apellido_empleado,
-        telefono_empleado,
-        direccion_empleado,
-        perfil_laboral,
-        experiencia_laboral,
-        servicios_realizados,
-        disponibilidad,
-        correo_empleado,
-        contrasena_empleado
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    await pool.execute(sql, [
-      documento_empleado,
-      nombre_empleado,
-      apellido_empleado,
-      telefono_empleado || null,
-      direccion_empleado || null,
-      perfil_laboral || null,
-      experiencia_laboral || null,
-      servicios_realizados || null,
-      disponibilidad || null,
-      correo_empleado,
-      hashed
-    ]);
-
-    res.json({ mensaje: 'Empleado registrado con éxito ✅' });
-
-  } catch (err) {
-    console.error(err);
-    if (err.code === 'ER_DUP_ENTRY') {
-      return res.status(409).json({ error: 'Documento o correo ya registrado' });
-    }
+    
     return res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
 
 // ==========================
-// Login (para cualquier rol)
+// Login 
 // ==========================
 app.post('/api/login', async (req, res) => {
   try {
@@ -276,17 +627,26 @@ app.post('/api/login', async (req, res) => {
       return res.status(400).json({ error: "Correo y contraseña son obligatorios" });
     }
 
-    // 1. Buscar en Administradores
-    let [rows] = await pool.query("SELECT correo_admin AS correo, contraseña_admin AS password, nivel_acceso AS rol FROM administrador WHERE correo_admin = ?", [correo]);
+    // Buscar en Administradores
+    let [rows] = await pool.query(
+      "SELECT documento_admin as id, correo_admin AS correo, contraseña_admin AS password, 'admin' AS rol, nombre_admin as nombre FROM administrador WHERE correo_admin = ?", 
+      [correo]
+    );
     
+    // Buscar en Empleados
     if (rows.length === 0) {
-      // 2. Buscar en Empleados
-      [rows] = await pool.query("SELECT correo_empleado AS correo, contrasena_empleado AS password, 'empleado' AS rol FROM empleado WHERE correo_empleado = ?", [correo]);
+      [rows] = await pool.query(
+        "SELECT documento_empleado as id, correo_empleado AS correo, contrasena_empleado AS password, 'empleado' AS rol, nombre_empleado as nombre FROM empleado WHERE correo_empleado = ?", 
+        [correo]
+      );
     }
 
+    // Buscar en Clientes
     if (rows.length === 0) {
-      // 3. Buscar en Clientes
-      [rows] = await pool.query("SELECT correo_cliente AS correo, contrasena AS password, 'cliente' AS rol FROM cliente WHERE correo_cliente = ?", [correo]);
+      [rows] = await pool.query(
+        "SELECT documento_cliente as id, correo_cliente AS correo, contrasena AS password, 'cliente' AS rol, nombre_cliente as nombre FROM cliente WHERE correo_cliente = ?", 
+        [correo]
+      );
     }
 
     if (rows.length === 0) {
@@ -294,253 +654,48 @@ app.post('/api/login', async (req, res) => {
     }
 
     const usuario = rows[0];
-
-    // Comparar contraseñas con bcrypt
     const match = await bcrypt.compare(contrasena, usuario.password);
+    
     if (!match) {
       return res.status(401).json({ error: "Contraseña incorrecta" });
     }
 
-    // Respuesta OK
-    res.json({ mensaje: "✅ Login exitoso", rol: usuario.rol });
+    delete usuario.password;
+    
+    res.json({ 
+      mensaje: "✅ Login exitoso", 
+      rol: usuario.rol,
+      usuario: usuario
+    });
   } catch (err) {
     console.error("Error en login:", err);
     res.status(500).json({ error: "Error interno del servidor" });
   }
 });
+
 // ==========================
-// Login
+// Listar Administradores
 // ==========================
-app.post("/api/login", async (req, res) => {
+app.get('/api/administradores', async (req, res) => {
   try {
-    const { correo, contrasena } = req.body;
-
-    if (!correo || !contrasena) {
-      return res.status(400).json({ error: "Faltan credenciales" });
-    }
-
-    // Buscar en administradores
-    const [admin] = await pool.query(
-      "SELECT * FROM administrador WHERE correo_admin = ?",
-      [correo]
+    const [rows] = await pool.query(
+      'SELECT documento_admin, nombre_admin, apellido_admin, correo_admin, cargo, area, fecha_registro FROM administrador ORDER BY fecha_registro DESC'
     );
-    if (admin.length > 0) {
-      const match = await bcrypt.compare(contrasena, admin[0].contraseña_admin);
-      if (match) return res.json({ rol: "admin" });
-    }
-
-    // Buscar en empleados
-    const [empleado] = await pool.query(
-      "SELECT * FROM empleado WHERE correo_empleado = ?",
-      [correo]
-    );
-    if (empleado.length > 0) {
-      const match = await bcrypt.compare(contrasena, empleado[0].contrasena_empleado);
-      if (match) return res.json({ rol: "empleado" });
-    }
-
-    // Buscar en clientes
-    const [cliente] = await pool.query(
-      "SELECT * FROM cliente WHERE correo_cliente = ?",
-      [correo]
-    );
-    if (cliente.length > 0) {
-      const match = await bcrypt.compare(contrasena, cliente[0].contrasena);
-      if (match) return res.json({ rol: "cliente" });
-    }
-
-    // Si no coincide con nada
-    return res.status(401).json({ error: "Credenciales inválidas" });
+    
+    res.json({
+      success: true,
+      total: rows.length,
+      administradores: rows
+    });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Error en el servidor" });
+    console.error('Error obteniendo administradores:', err);
+    res.status(500).json({ error: 'Error al obtener administradores' });
   }
 });
 
-
-// ==========================
 // Iniciar servidor
-// ==========================
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Backend corriendo en http://localhost:${PORT}`);
-});
-
-// ==========================
-// Password recovery endpoints
-// ==========================
-
-// Request recovery code
-app.post('/api/password/recover', async (req, res) => {
-  try {
-    const { email } = req.body;
-    if (!email) return res.status(400).json({ error: 'Email requerido' });
-
-    // Buscar en los tres tipos
-    let role = null;
-    let identifier = null; // documento or id to identify user
-
-    const [admins] = await pool.query('SELECT documento_admin AS id, correo_admin AS correo FROM administrador WHERE correo_admin = ?', [email]);
-    if (admins.length > 0) { role = 'admin'; identifier = admins[0].id; }
-
-    const [empleados] = await pool.query('SELECT documento_empleado AS id, correo_empleado AS correo FROM empleado WHERE correo_empleado = ?', [email]);
-    if (!role && empleados.length > 0) { role = 'empleado'; identifier = empleados[0].id; }
-
-    const [clientes] = await pool.query('SELECT documento_cliente AS id, correo_cliente AS correo FROM cliente WHERE correo_cliente = ?', [email]);
-    if (!role && clientes.length > 0) { role = 'cliente'; identifier = clientes[0].id; }
-
-    if (!role) return res.status(404).json({ error: 'Email no registrado' });
-
-    // generar código 6 dígitos
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expires = Date.now() + 15 * 60 * 1000; // 15 min
-    // Persistir en la tabla password_resets
-    try {
-      await pool.execute(
-        'INSERT INTO password_resets (email, code, expires_at, role, identifier, used, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)',
-        [email, code, expires, role, identifier, Date.now()]
-      );
-    } catch (dbErr) {
-      console.error('Error saving reset token:', dbErr);
-    }
-
-    // intentar enviar email si transporter configurado
-    if (transporter) {
-      const mailOptions = {
-        from: process.env.SMTP_FROM || process.env.SMTP_USER,
-        to: email,
-        subject: 'Código para recuperar contraseña - Coll Service',
-        text: `Tu código para recuperar la contraseña es: ${code} (válido 15 minutos)`
-      };
-      try {
-        await transporter.sendMail(mailOptions);
-      } catch (mailErr) {
-        console.error('Error enviando email:', mailErr);
-        // no fallamos la petición, devolvemos el código en response en entorno de desarrollo
-        if (process.env.NODE_ENV !== 'production') return res.json({ ok: true, debugCode: code });
-      }
-    } else {
-      // no hay transporter configurado, en desarrollo devolvemos el código para pruebas
-      if (process.env.NODE_ENV !== 'production') return res.json({ ok: true, debugCode: code });
-    }
-
-    return res.json({ ok: true });
-  } catch (err) {
-    console.error('recover error', err);
-    return res.status(500).json({ error: 'Error interno' });
-  }
-});
-
-  // ==========================
-  // Ratings endpoints
-  // ==========================
-
-  // Get ratings summary and optionally the user's own rating
-  app.get('/api/ratings/:employeeId', async (req, res) => {
-    try {
-      const { employeeId } = req.params;
-      const voterId = req.query.voterId || null;
-
-      const [rows] = await pool.query('SELECT rating, voter_id, comment FROM ratings WHERE employee_id = ?', [employeeId]);
-      const count = rows.length;
-      const avg = count ? (rows.reduce((s, r) => s + r.rating, 0) / count) : 0;
-      let userRating = null;
-      if (voterId) {
-        const found = rows.find(r => r.voter_id === voterId);
-        if (found) userRating = found.rating;
-      }
-
-      return res.json({ ok: true, avg: Math.round(avg * 10) / 10, count, userRating, history: rows.slice(-10).map(r => ({ rating: r.rating, comment: r.comment })) });
-    } catch (err) {
-      console.error('ratings GET error', err);
-      return res.status(500).json({ error: 'Error interno' });
-    }
-  });
-
-  // Upsert rating (create or update by voterId)
-  app.post('/api/ratings', async (req, res) => {
-    try {
-      const { employeeId, rating, voterId, comment } = req.body;
-      if (!employeeId || !rating || !voterId) return res.status(400).json({ error: 'employeeId, rating y voterId son requeridos' });
-
-      const now = Date.now();
-      // Try update first
-      const [updated] = await pool.execute('UPDATE ratings SET rating = ?, comment = ?, updated_at = ? WHERE employee_id = ? AND voter_id = ?', [rating, comment || null, now, employeeId, voterId]);
-      if (updated && updated.affectedRows === 0) {
-        await pool.execute('INSERT INTO ratings (employee_id, voter_id, rating, comment, created_at) VALUES (?, ?, ?, ?, ?)', [employeeId, voterId, rating, comment || null, now]);
-      }
-
-      // return fresh summary
-      const [rows] = await pool.query('SELECT rating FROM ratings WHERE employee_id = ?', [employeeId]);
-      const count = rows.length;
-      const avg = count ? (rows.reduce((s, r) => s + r.rating, 0) / count) : 0;
-      return res.json({ ok: true, avg: Math.round(avg * 10) / 10, count, userRating: Number(rating) });
-    } catch (err) {
-      console.error('ratings POST error', err);
-      return res.status(500).json({ error: 'Error interno' });
-    }
-  });
-
-  // Delete rating by voter
-  app.delete('/api/ratings', async (req, res) => {
-    try {
-      const { employeeId, voterId } = req.body;
-      if (!employeeId || !voterId) return res.status(400).json({ error: 'employeeId y voterId son requeridos' });
-      await pool.execute('DELETE FROM ratings WHERE employee_id = ? AND voter_id = ?', [employeeId, voterId]);
-      const [rows] = await pool.query('SELECT rating FROM ratings WHERE employee_id = ?', [employeeId]);
-      const count = rows.length; const avg = count ? (rows.reduce((s, r) => s + r.rating, 0) / count) : 0;
-      return res.json({ ok: true, avg: Math.round(avg * 10) / 10, count });
-    } catch (err) {
-      console.error('ratings DELETE error', err);
-      return res.status(500).json({ error: 'Error interno' });
-    }
-  });
-
-// Verify code
-app.post('/api/password/verify', async (req, res) => {
-  try {
-    const { email, code } = req.body;
-    if (!email || !code) return res.status(400).json({ error: 'Email y código son requeridos' });
-    const [rows] = await pool.query('SELECT * FROM password_resets WHERE email = ? AND used = 0 ORDER BY created_at DESC LIMIT 1', [email]);
-    if (!rows || rows.length === 0) return res.status(400).json({ error: 'No hay solicitud de recuperación para este email' });
-    const rec = rows[0];
-    if (Date.now() > rec.expires_at) {
-      // marcar como usado/invalidado
-      await pool.execute('UPDATE password_resets SET used = 1 WHERE id = ?', [rec.id]);
-      return res.status(400).json({ error: 'Código expirado' });
-    }
-    if (String(rec.code) !== String(code)) return res.status(400).json({ error: 'Código incorrecto' });
-    return res.json({ ok: true });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: 'Error interno' });
-  }
-});
-
-// Reset password
-app.post('/api/password/reset', async (req, res) => {
-  try {
-    const { email, code, newPassword } = req.body;
-    if (!email || !code || !newPassword) return res.status(400).json({ error: 'Email, código y nueva contraseña requeridos' });
-    const [rows] = await pool.query('SELECT * FROM password_resets WHERE email = ? AND used = 0 ORDER BY created_at DESC LIMIT 1', [email]);
-    if (!rows || rows.length === 0) return res.status(400).json({ error: 'No hay solicitud de recuperación para este email' });
-    const rec = rows[0];
-    if (Date.now() > rec.expires_at) { await pool.execute('UPDATE password_resets SET used = 1 WHERE id = ?', [rec.id]); return res.status(400).json({ error: 'Código expirado' }); }
-    if (String(rec.code) !== String(code)) return res.status(400).json({ error: 'Código incorrecto' });
-
-    const hashed = await bcrypt.hash(newPassword, 10);
-    if (rec.role === 'admin') {
-      await pool.execute('UPDATE administrador SET contraseña_admin = ? WHERE correo_admin = ?', [hashed, email]);
-    } else if (rec.role === 'empleado') {
-      await pool.execute('UPDATE empleado SET contrasena_empleado = ? WHERE correo_empleado = ?', [hashed, email]);
-    } else if (rec.role === 'cliente') {
-      await pool.execute('UPDATE cliente SET contrasena = ? WHERE correo_cliente = ?', [hashed, email]);
-    }
-
-    await pool.execute('UPDATE password_resets SET used = 1 WHERE id = ?', [rec.id]);
-    return res.json({ ok: true });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: 'Error interno' });
-  }
+  console.log(`📁 Ruta para archivos: http://localhost:${PORT}/uploads/`);
 });
