@@ -3,11 +3,12 @@ import axios from "axios";
 
 export default function RecuperarContrasena({ setView }) {
   const [form, setForm] = useState({ email: "" });
-  const [step, setStep] = useState(1); // 1: pedir email, 2: código, 3: nueva contraseña, 4: éxito
+  const [step, setStep] = useState(1);
   const [error, setError] = useState("");
   const [codigoIngresado, setCodigoIngresado] = useState("");
   const [debugCode, setDebugCode] = useState(null);
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState(""); // NUEVO ESTADO
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -19,7 +20,6 @@ export default function RecuperarContrasena({ setView }) {
     if (!form.email) return setError("Por favor ingresa tu correo electrónico.");
     try {
       const res = await axios.post("http://localhost:5000/api/password/recover", { email: form.email });
-      // en desarrollo backend puede devolver debugCode para pruebas
       if (res.data?.debugCode) setDebugCode(String(res.data.debugCode));
       setStep(2);
     } catch (err) {
@@ -42,9 +42,27 @@ export default function RecuperarContrasena({ setView }) {
   const handleResetSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    if (!newPassword || newPassword.length < 6) return setError("La contraseña debe tener al menos 6 caracteres");
+    
+    // VALIDACIONES MEJORADAS
+    if (!newPassword || !confirmPassword) {
+      return setError("Ambos campos de contraseña son requeridos");
+    }
+    
+    if (newPassword.length < 6) {
+      return setError("La contraseña debe tener al menos 6 caracteres");
+    }
+    
+    if (newPassword !== confirmPassword) {
+      return setError("Las contraseñas no coinciden");
+    }
+    
     try {
-      await axios.post("http://localhost:5000/api/password/reset", { email: form.email, code: codigoIngresado, newPassword });
+      await axios.post("http://localhost:5000/api/password/reset", { 
+        email: form.email, 
+        code: codigoIngresado, 
+        newPassword,
+        confirmPassword  // ¡IMPORTANTE!
+      });
       setStep(4);
     } catch (err) {
       setError(err.response?.data?.error || "Error al cambiar la contraseña");
@@ -123,6 +141,7 @@ export default function RecuperarContrasena({ setView }) {
       `}</style>
       <div className="login-container">
         <h2>Recuperar Contraseña</h2>
+        
         {step === 1 && (
           <form onSubmit={handleSubmit}>
             <div className="input-group">
@@ -143,6 +162,7 @@ export default function RecuperarContrasena({ setView }) {
             {error && <div style={{ color: '#e74c3c', marginTop: 10 }}>{error}</div>}
           </form>
         )}
+        
         {step === 2 && (
           <form onSubmit={handleCodigoSubmit}>
             <div className="input-group">
@@ -183,6 +203,20 @@ export default function RecuperarContrasena({ setView }) {
                 required
               />
             </div>
+            
+            <div className="input-group">
+              <label htmlFor="confirmpass">Confirmar nueva contraseña</label>
+              <input
+                type="password"
+                id="confirmpass"
+                name="confirmpass"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                placeholder="Repite la nueva contraseña"
+                required
+              />
+            </div>
+            
             <button type="submit" className="btn-login">Cambiar contraseña</button>
             {error && <div style={{ color: '#e74c3c', marginTop: 10 }}>{error}</div>}
           </form>
@@ -193,12 +227,11 @@ export default function RecuperarContrasena({ setView }) {
             Contraseña cambiada con éxito. Ahora puedes iniciar sesión con tu nueva contraseña.
           </div>
         )}
+        
         <div className="extra" style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <a href="#" onClick={e => {e.preventDefault(); setView && setView('login');}} style={{display:'flex',alignItems:'center',gap:6}}>
             <span style={{fontSize:18}}>←</span> Volver al inicio de sesión
           </a>
-          
-        
         </div>
       </div>
     </>
