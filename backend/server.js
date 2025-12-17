@@ -13,7 +13,7 @@ app.use(cors());
 app.use(express.json());
 
 // ==========================
-// CONFIGURACIÓN GMAIL REAL
+// CONFIGURACIÓN
 // ==========================
 console.log('\n🔧 VERIFICANDO CONFIGURACIÓN EMAIL:');
 console.log('EMAIL_USER:', process.env.EMAIL_USER || 'NO CONFIGURADO');
@@ -249,7 +249,7 @@ app.get('/api/ping', async (req, res) => {
 });
 
 // ==========================
-// REGISTRO DE EMPLEADA (CON VERIFICACIÓN)
+// REGISTRO DE EMPLEADA
 // ==========================
 app.post('/api/empleadas/registro', upload.fields([
     { name: 'antecedentes_penales', maxCount: 1 },
@@ -455,7 +455,7 @@ app.post('/api/empleadas/registro', upload.fields([
 });
 
 // ==========================
-// REGISTRO DE ADMINISTRADOR (CON VERIFICACIÓN)
+// REGISTRO DE ADMINISTRADOR
 // ==========================
 app.post('/api/administradores/registro', async (req, res) => {
     const connection = await pool.getConnection();
